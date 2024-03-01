@@ -7,6 +7,7 @@ This file creates your application.
 
 # from crypt import methods
 import site 
+import json
 
 from app import app, Config,  mongo, Mqtt
 from flask import escape, render_template, request, jsonify, send_file, redirect, make_response, send_from_directory 
@@ -17,6 +18,7 @@ from os import getcwd
 from os.path import join, exists
 from time import time, ctime
 from math import floor
+from pymongo import ReturnDocument
  
 
 
@@ -27,22 +29,84 @@ from math import floor
 
 
 # 1. CREATE ROUTE FOR '/api/set/combination'
+@app.route('/api/set/combination', methods=['POST'])
+def set_combination():
+    passcode = request.json.get('code')
+    print(f"passcode: {passcode}")
+    if request.method == 'POST':
+        try:
+            success = mongo.updateCode(passcode)   
+            if success:
+                return jsonify({"status": "complete", "data": "complete"})
+            else:
+                return jsonify({"status": "failed", "data": "failed"})
+        except Exception as ex:
+            print(f"set_combination error: f{str(ex)}")  
     
 # 2. CREATE ROUTE FOR '/api/check/combination'
+@app.route('/api/check/combination', methods=['POST'])
+def check_combination():
+    if request.method == 'POST':
+        try:
+            passcode = request.form.get('passcode')
+            if passcode:
+                result = mongo.checkCode(passcode)
+                if result != 0:
+                    return jsonify({"status": "complete", "data": "complete"})
+                else:
+                    return jsonify({"status": "failed", "data": "failed"})
+        except Exception as ex:
+            print(f"check_combination error: f{str(ex)}")
 
 # 3. CREATE ROUTE FOR '/api/update'
+@app.route('/api/update', methods=['POST'])
+def update_data():
+    if request.method == 'POST' and request.is_json:
+        try:
+            json_data = request.get_json()
+            timestamp = datetime.now().timestamp()
+            timestamp = floor(timestamp)
+            json_data['timestamp'] = timestamp
+            Mqtt.publish('620157646_sub', mongo.dumps(json_data))
+            # Mqtt.publish('620157646_pub', json.dumps(json_data))
+            Mqtt.publish('620157646', mongo.dumps(json_data))
+            result = mongo.addData(json_data)
+            if result:
+                return jsonify({"status": "complete", "data": "complete"})
+            else:
+                return jsonify({"status": "failed", "data": "failed"})
+        except Exception as ex:
+           print(f"update_data error: f{str(ex)}")
    
 # 4. CREATE ROUTE FOR '/api/reserve/<start>/<end>'
+@app.route('/api/reserve/<start>/<end>', methods=['GET'])
+def get_data(start, end):
+     if request.method == 'GET':
+        try:
+            start = int(start)
+            end = int(end)
+            data = mongo.getData(start, end)
+            if data:
+                return jsonify({"status": "found", "data": data})
+            else:
+                return jsonify({"status": "failed", "data": 0})
+        except Exception as ex:
+           print(f"get_data error: f{str(ex)}")
 
 # 5. CREATE ROUTE FOR '/api/avg/<start>/<end>'
-
-
-   
-
-
-
-
-
+@app.route('/api/avg/<start>/<end>', methods=['GET'])
+def get_avg(start, end):
+     if request.method == 'GET':
+        try:
+            start = int(start)
+            end = int(end)
+            avg = list(mongo.getAvg(start, end))
+            if avg:
+                return jsonify({"status": "found", "data": avg})
+            else:
+                return jsonify({"status": "failed", "data": 0})
+        except Exception as ex:
+            print(f"get_avg error: f{str(ex)}")
 
 @app.route('/api/file/get/<filename>', methods=['GET']) 
 def get_images(filename):   
